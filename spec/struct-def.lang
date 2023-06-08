@@ -1,0 +1,9 @@
+// a struct definition
+
+pub struct Person {
+    // a field called `name` with type `?String`
+    // the `?` denotes that the type is nullable
+    name ?String,
+    // a field called `age` with type `u8`, an 8-bit unsigned integer
+    age u8,
+}

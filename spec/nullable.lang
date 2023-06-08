@@ -1,0 +1,37 @@
+// functions can return nullable values
+fn foo(x bool) ?[]u8 {
+    if x {
+        "bar"
+    } else {
+        null
+    }
+}
+
+pub fn main() {
+    // `x` is a `?u8`, a nullable 8-bit unsigned integer
+    x ?u8 := null;
+
+    y u8 := 0;
+    guard x {
+        // if x is non-null, the guard block is executed with x's `?` stripped
+        x += y;
+    }
+
+    // guard clauses can be expressions too
+    z := guard x {
+        42
+    } else {
+        33
+    };
+
+    // guard clauses, like if expressions, evaluate to a nullable value if
+    // they have no else branch
+    w ?u8 := guard x {
+        x * 2
+    };
+
+    // guard expressions can be named like so
+    a ?[]u8 := guard foo(true) as b {
+        b + "baz"
+    }
+}
