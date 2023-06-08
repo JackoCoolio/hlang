@@ -52,11 +52,14 @@ instance Show Token where
   show (Literal lit) = show lit
   show t = "`" ++ pp 0 t ++ "`"
 
-data Literal = Integer' Int | String' String deriving (Eq)
+data Literal = Integer' Int | String' String | Boolean Bool deriving (Eq)
 
 instance PrettyPrint Literal where
   pp _ (Integer' x) = show x
   pp _ (String' s) = s
+  pp _ (Boolean b)
+    | b = "true"
+    | not b = "false"
 
 instance Show Literal where
   show (String' _) = "a string"
@@ -79,8 +82,23 @@ ident = do
 
 literal :: Lexer Token
 literal = do
-  lit <- choice [intLit, strLit]
+  lit <- choice [intLit, strLit, boolLit]
   return $ Literal lit
+
+boolLit :: Lexer Literal
+boolLit = choice [try trueLit, try falseLit]
+  
+trueLit :: Lexer Literal
+trueLit = do
+  string "true"
+  notFollowedBy alphaNum
+  return $ Boolean True
+
+falseLit :: Lexer Literal
+falseLit = do
+  string "false"
+  notFollowedBy alphaNum
+  return $ Boolean False
 
 intLit :: Lexer Literal
 intLit = do
@@ -136,8 +154,8 @@ type TokenPos = WithPos Token
 token =
   withPos $
     (choice
-      [ ident,
-        literal,
+      [ literal, -- literal must come before ident
+        ident,
         lcurly,
         rcurly,
         lparen,
