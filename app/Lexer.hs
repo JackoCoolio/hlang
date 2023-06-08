@@ -51,6 +51,7 @@ data Token
   | Slash
   | Semi
   | Dot
+  | Comma
   deriving (Eq)
 
 instance PrettyPrint Token where
@@ -70,6 +71,7 @@ instance PrettyPrint Token where
   pp _ Slash = "/"
   pp _ Semi = ";"
   pp _ Dot = "."
+  pp _ Comma = ","
 
 instance Show Token where
   show (Illegal c) = pp 0 (Illegal c)
@@ -137,19 +139,20 @@ strLit = do
   value <- manyTill anyChar (try (char '"'))
   return $ String' value
 
-lcurly, rcurly, lparen, rparen, lbracket, rbracket, plus, minus, star, slash, semi, dot :: Lexer Token
+lcurly, rcurly, lparen, rparen, lbracket, rbracket, plus, minus, star, slash, semi, dot, comma :: Lexer Token
 lcurly = char '{' >> return LCurly
 rcurly = char '}' >> return RCurly
 lparen = char '(' >> return LParen
 rparen = char ')' >> return RParen
+lbracket = char '[' >> return LBracket
+rbracket = char ']' >> return RBracket
 plus = char '+' >> return Plus
 minus = char '-' >> return Minus
 star = char '*' >> return Star
 slash = char '/' >> return Slash
 semi = char ';' >> return Semi
 dot = char '.' >> return Dot
-lbracket = char '[' >> return LBracket
-rbracket = char ']' >> return RBracket
+comma = char ',' >> return Comma
 
 data WithPos a = WithPos a SourcePos
 
@@ -194,7 +197,8 @@ token =
         star,
         slash,
         semi,
-        dot
+        dot,
+        comma
       ] <|> illegal)
       <* spaces
 

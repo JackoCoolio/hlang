@@ -246,9 +246,9 @@ exprBpLoop minBp lhs = do
 exprBpLoopPostfix minBp lhs op = do
   case op of
     FnCallOp -> do
-      args <- expr
+      args <- sepEndBy expr (eat Comma)
       eat RParen
-      let newLhs = AST.FnCallExpr lhs [args]
+      let newLhs = AST.FnCallExpr lhs args
        in
         exprBpLoop minBp newLhs
     IndexOp -> do
