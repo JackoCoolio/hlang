@@ -11,8 +11,32 @@ l' parser = parse parser "repl"
 l :: String -> Either ParseError [TokenPos]
 l = l' tokens
 
+data Keyword = KwIf | KwElse | KwPub | KwFn | KwGuard | KwAs deriving (Eq)
+instance Show Keyword where
+  show KwIf = "if"
+  show KwElse = "else"
+  show KwPub = "pub"
+  show KwFn = "fn"
+  show KwGuard = "guard"
+  show KwAs = "as"
+
+keyword :: Lexer Token
+keyword = do
+  kw <- try $
+    choice $
+      map (\kw -> string (show kw) >> return kw)
+        [ KwIf,
+          KwElse,
+          KwPub,
+          KwFn,
+          KwGuard,
+          KwAs
+        ]
+  return $ Keyword kw
+
 data Token
   = Illegal Char
+  | Keyword Keyword
   | Ident String
   | Literal Literal
   | LCurly
@@ -32,6 +56,7 @@ data Token
 instance PrettyPrint Token where
   pp _ (Illegal c) = "<illegal: '" ++ [c] ++ "'>"
   pp _ (Ident s) = s
+  pp _ (Keyword kw) = show kw
   pp i (Literal lit) = pp i lit
   pp _ LCurly = "{"
   pp _ RCurly = "}"
@@ -155,6 +180,7 @@ token =
   withPos $
     (choice
       [ literal, -- literal must come before ident
+        keyword,
         ident,
         lcurly,
         rcurly,

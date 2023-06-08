@@ -4,7 +4,7 @@ import qualified AST
 import Control.Monad (when)
 import Data.Functor
 import Data.Maybe (isJust, isNothing)
-import Lexer hiding (literal, token)
+import Lexer hiding (literal, token, keyword, ident)
 import Text.Parsec hiding (satisfy)
 import Text.Parsec.Pos (updatePosChar)
 import PP (PrettyPrint, pp)
@@ -109,8 +109,8 @@ grouped delim p = do
     (eat $ right) <?> (show right)
     return out
 
-keyword :: String -> Parser Lexer.TokenPos
-keyword name = satisfy (== Lexer.Ident name) <?> "`" ++ name ++ "`"
+keyword :: Keyword -> Parser Lexer.TokenPos
+keyword kw = satisfy (== Lexer.Keyword kw) <?> "`" ++ show kw ++ "`"
 
 ident :: Parser AST.Ident
 ident = do
@@ -129,12 +129,27 @@ exprLiteral = do
 
 exprIfElse :: Parser AST.Expr
 exprIfElse = do
-  keyword "if"
+  keyword KwIf
   a <- expr
   b <- grouped Curly expr <?> "a block expression"
-  keyword "else"
+  keyword KwElse
   c <- grouped Curly expr <?> "a block expression"
   return $ AST.IfElse a b c
+
+guardAs :: Parser AST.Ident
+guardAs = do
+  keyword KwAs
+  ident
+
+exprGuardElse :: Parser AST.Expr
+exprGuardElse = do
+  keyword KwGuard
+  clause <- expr
+  as_ <- optionMaybe guardAs
+  x <- grouped Curly expr <?> "a block expression"
+  keyword KwElse
+  y <- grouped Curly expr <?> "a block expression"
+  return $ AST.GuardElse clause as_ x y
 
 infixOp :: Parser AST.BinOp
 infixOp = do
@@ -178,7 +193,7 @@ binToFieldPass e = e
 
 -- | Parses a non-binary expression.
 nbExpr :: Parser AST.Expr
-nbExpr = choice [exprIfElse, exprLiteral, unaryExpr, exprIdent]
+nbExpr = choice [exprGuardElse, exprIfElse, exprLiteral, unaryExpr, exprIdent]
 
 -- | Parses an expression.
 expr :: Parser AST.Expr

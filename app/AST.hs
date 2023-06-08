@@ -43,6 +43,7 @@ data Expr
   | Field Expr Ident
   | Var Ident
   | IfElse Expr Expr Expr
+  | GuardElse Expr (Maybe Ident) Expr Expr
   | FnCallExpr Expr [Expr]
   | IndexExpr Expr Expr
   deriving (Show)
@@ -58,5 +59,7 @@ instance PrettyPrint Expr where
   pp i (Field e id) = pp i e ++ "." ++ pp i id
   pp i (Var id) = pp i id
   pp i (IfElse a b c) = "if " ++ pp i a ++ " {" ++ nl 2 ++ pp i b ++ nl 0 ++ "} else {" ++ nl 2 ++ pp i c ++ nl 0 ++ "}"
+  pp i (GuardElse c Nothing x y) = "guard " ++ pp i c ++ " {" ++ nl 2 ++ pp i x ++ nl 0 ++ "} else {" ++ nl 2 ++ pp i y ++ nl 0 ++ "}"
+  pp i (GuardElse c (Just a) x y) = "guard " ++ pp i c ++ " as " ++ pp i a ++ " {" ++ nl 2 ++ pp i x ++ nl 0 ++ "} else {" ++ nl 2 ++ pp i y ++ nl 0 ++ "}"
   pp i (FnCallExpr lhs args) = pp i lhs ++ "(" ++ pp i (head args) ++ ")"
   pp i (IndexExpr lhs index) = pp i lhs ++ "[" ++ pp i index ++ "]"
