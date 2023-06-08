@@ -21,9 +21,8 @@ instance Show Keyword where
   show KwAs = "as"
 
 keyword :: Lexer Token
-keyword = do
-  kw <- try $
-    choice $
+keyword = try $ do
+  kw <- choice $
       map (\kw -> string (show kw) >> return kw)
         [ KwIf,
           KwElse,
@@ -32,6 +31,7 @@ keyword = do
           KwGuard,
           KwAs
         ]
+  notFollowedBy alphaNum
   return $ Keyword kw
 
 data Token
@@ -128,6 +128,7 @@ falseLit = do
 intLit :: Lexer Literal
 intLit = do
   n <- many1 digit
+  notFollowedBy letter
   return $ Integer' $ read n
 
 strLit :: Lexer Literal
