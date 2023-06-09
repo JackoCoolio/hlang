@@ -1,0 +1,32 @@
+// `else` can be thought of as a left-associative infix function.
+// For a given type `T`, the LHS of `else` must be of type `?T` and the RHS
+// must be `T` or `?T`.
+
+fn foo() ?i32 { ... }
+
+fn bar() bool { ... }
+
+pub fn main() {
+    // `else` can be used to provide a default value
+    x := foo() else 42;
+
+    // `else` can be used between an `if` expression and a block expression
+    // Recall that `if` expressions evaluate to `?A`.
+    y i32 := if bar() {
+        42
+    } else {
+        1337
+    };
+
+    // The expression above is equivalent to the following:
+    y i32 := (if bar() {
+        42
+    }) else ({
+        1337
+    });
+
+    // `else` used after a `guard` expression:
+    z := guard foo() as w {
+        w * 2
+    } else 50;
+}

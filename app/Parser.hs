@@ -10,11 +10,21 @@ import Text.Parsec.Pos (updatePosChar)
 import PP (PrettyPrint, pp)
 import Control.Exception (assert)
 import Debug.Trace (trace)
+import AST (Stmt)
 
 prog s = (p (do
   out <- expr
   eof
   return out) s)
+
+testFile = "test.ria"
+
+pTest :: Parser a -> IO (Either ParseError a)
+pTest parser = do
+  text <- readFile testFile
+  let (Right tokens) = Lexer.l text
+   in
+    return $ parse parser testFile tokens
 
 p :: Parser a -> String -> Either ParseError a
 p parser s = do
@@ -56,21 +66,6 @@ satisfy f =
 eat :: Token -> Parser TokenPos
 eat t = satisfy (==t)
 
-
-
-{-
-op :: Parser (WithPos Op)
-op =
-    choice
-        [
-            -- I have a feeling there's a more elegant way to do this.
-            ($> Add) <$> (satisfy (==Plus)),
-            ($> Sub) <$> (satisfy (==Minus)),
-            ($> Mul) <$> (satisfy (==Star)),
-            ($> Div) <$> (satisfy (==Slash))
-        ]
--}
-
 isLiteralMaybe (Lexer.Literal lit) = Just lit
 isLiteralMaybe _ = Nothing
 
@@ -82,6 +77,7 @@ infixBp AST.SubOp = (5, 6)
 infixBp AST.MulOp = (7, 8)
 infixBp AST.DivOp = (7, 8)
 infixBp AST.DotOp = (13, 14)
+infixBp AST.ElseOp = (1, 2)
 
 prefixBp AST.NegOp = 9
 
@@ -110,7 +106,24 @@ grouped delim p = do
     return out
 
 keyword :: Keyword -> Parser Lexer.TokenPos
-keyword kw = satisfy (== Lexer.Keyword kw) <?> "`" ++ show kw ++ "`"
+keyword kw = satisfy (== Lexer.Keyword kw)
+
+keywordExpect kw = keyword kw <?> show kw
+
+-- | `True` if the given expression doesn't need a trailing semicolon if it is
+-- used as a statement.
+stmtExprCanSkipSemi :: AST.Expr -> Bool
+stmtExprCanSkipSemi (AST.Block _ _) = True
+stmtExprCanSkipSemi (AST.Binary leading AST.ElseOp trailing) = stmtExprCanSkipSemi leading && stmtExprCanSkipSemi trailing
+stmtExprCanSkipSemi (AST.If _ _) = True -- if exprs end in block exprs
+stmtExprCanSkipSemi (AST.Guard _ _ _) = True -- if exprs end in block exprs
+stmtExprCanSkipSemi _ = False
+
+exprBlock :: Parser AST.Expr
+exprBlock = grouped Curly $ do
+  stmts <- many stmt
+  trailing <- optionMaybe expr
+  return $ AST.Block stmts trailing
 
 ident :: Parser AST.Ident
 ident = do
@@ -127,29 +140,27 @@ exprLiteral = do
   lit <- satisfyMaybe isLiteralMaybe
   return $ AST.Literal lit
 
-exprIfElse :: Parser AST.Expr
-exprIfElse = do
+exprIf :: Parser AST.Expr
+exprIf = do
   keyword KwIf
-  a <- expr
-  b <- grouped Curly expr <?> "a block expression"
-  keyword KwElse
-  c <- grouped Curly expr <?> "a block expression"
-  return $ AST.IfElse a b c
+  clause <- expr
+  e <- exprBlock <?> "a block expression"
+  return $ AST.If clause e
 
 guardAs :: Parser AST.Ident
 guardAs = do
   keyword KwAs
   ident
 
-exprGuardElse :: Parser AST.Expr
-exprGuardElse = do
+exprGuard :: Parser AST.Expr
+exprGuard = do
   keyword KwGuard
   clause <- expr
-  as_ <- optionMaybe guardAs
-  x <- grouped Curly expr <?> "a block expression"
-  keyword KwElse
-  y <- grouped Curly expr <?> "a block expression"
-  return $ AST.GuardElse clause as_ x y
+  as_ <- optionMaybe $ do
+    keyword KwAs
+    ident
+  e <- exprBlock <?> "a block expression"
+  return $ AST.Guard clause as_ e
 
 infixOp :: Parser AST.BinOp
 infixOp = do
@@ -158,7 +169,8 @@ infixOp = do
       eat Minus $> AST.SubOp,
       eat Star $> AST.MulOp,
       eat Slash $> AST.DivOp,
-      eat Dot $> AST.DotOp
+      eat Dot $> AST.DotOp,
+      keyword KwElse $> AST.ElseOp
     ]
 
 unaryOp :: Parser AST.UnaryOp
@@ -193,7 +205,7 @@ binToFieldPass e = e
 
 -- | Parses a non-binary expression.
 nbExpr :: Parser AST.Expr
-nbExpr = choice [exprGuardElse, exprIfElse, exprLiteral, unaryExpr, exprIdent]
+nbExpr = choice [exprBlock, exprGuard, exprIf, exprLiteral, unaryExpr, exprIdent]
 
 -- | Parses an expression.
 expr :: Parser AST.Expr
@@ -212,16 +224,6 @@ exprBp minBp = do
 exprBpLoop :: Int -> AST.Expr -> Parser AST.Expr
 -- exprBpLoop minBp lhs | trace ("eBpL: " ++ show minBp ++ ", " ++ show lhs) False = undefined
 exprBpLoop minBp lhs = do
-{-
-  maybeEof <- optionMaybe eof
-  case maybeEof of
-    Just _ -> return lhs
-    Nothing -> do
-      loopRes <- optionMaybe $ choice [exprBpLoopPostfix minBp lhs, exprBpLoopInfix minBp lhs]
-      case loopRes of
-        Nothing -> return lhs
-        Just res -> return res
--}
   maybeOp <- optionMaybe $ try $ lookAhead $ choice [Left <$> postfixOp, Right <$> infixOp]
   case maybeOp of
     Nothing -> return lhs
@@ -265,3 +267,17 @@ exprBpLoopInfix minBp rightBp lhs op = do
   let newLhs = AST.Binary lhs op rhs
    in
     exprBpLoop minBp newLhs
+
+stmt :: Parser AST.Stmt
+stmt = do
+  -- eat any leading semicolons
+  many $ eat Semi
+  choice [try stmtExpr]
+
+stmtExpr :: Parser AST.Stmt
+stmtExpr = do
+  e <- expr
+  -- if the expression needs a trailing semicolon, eat it, otherwise leave it
+  -- for the leading-semicolon handler above
+  when (not $ stmtExprCanSkipSemi e) (eat Semi >> return ())
+  return $ AST.StmtExpr e
